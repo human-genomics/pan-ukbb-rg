@@ -9,11 +9,27 @@ BENCH_N ?= 90
 RAYON_THREADS ?= 50
 MAX_PARALLEL_SHARDS ?= 1
 TRAIT_BLOCK_SIZE ?= 256
+EXTERNAL_RG_TRAIT_BLOCK_SIZE ?= 64
 CARGO_BUILD_JOBS ?= 16
 VALIDATION_PAIRS ?= 100
 VALIDATION_SEED ?= 20260527
 VALIDATION_JOBS ?= 8
 VALIDATION_RAYON_THREADS ?= 8
+EXTERNAL_GWAS_TARGETS ?= config/external_gwas_targets.tsv
+EXTERNAL_GWAS_DIR ?= data/external_gwas
+EXTERNAL_GWAS_SOURCES ?= gwas_catalog,zenodo_indep107,figshare_file,direct_url,nextcloud_file
+EXTERNAL_GWAS_INCLUDE ?=
+EXTERNAL_GWAS_LIMIT ?=
+EXTERNAL_GWAS_MAX_ROWS ?=
+EXTERNAL_GWAS_ZENODO_ARCHIVE ?=
+EXTERNAL_GWAS_RSID_REFERENCE ?=
+EXTERNAL_GWAS_URL_OVERRIDES ?= config/external_gwas_restricted_urls.tsv
+EXTERNAL_GWAS_STRICT ?=
+PAN_GWAS_MANIFEST ?= data/catalog/eur_gwas_manifest.tsv
+PAN_SUMSTATS_DIR ?= data/sumstats/eur
+EXTERNAL_RG_MANIFEST ?= $(EXTERNAL_GWAS_DIR)/catalog/external_gwas_manifest.tsv
+EXTERNAL_RG_DIR ?= results/external_rg
+EXTERNAL_RG_SUMSTATS_DIR ?= data/external_rg/sumstats
 
 PAN_BASE := https://pan-ukb-us-east-1.s3.amazonaws.com
 MANIFEST := data/manifests/phenotype_manifest.tsv.bgz
@@ -29,7 +45,7 @@ LDSC_RS_BIN ?= $(LDSC_RS_TARGET)/release/ldsc
 ALL_RG_DIR ?= results/all_rg
 ALL_RG_VALIDATION_DIR ?= results/all_rg_validation
 
-.PHONY: all init setup fetch-manifests catalog validate-catalog select-benchmark prepare-ldscores setup-ldsc setup-ldsc-env prepare-sumstats prepare-all-sumstats one-vs-all one-vs-all-dry-run setup-ldsc-rs-rg-batch all-rg-prepare all-rg all-rg-dry-run all-rg-progress all-rg-collect all-rg-validation run-benchmark summarize benchmark90 hardware clean-small
+.PHONY: all init setup fetch-manifests catalog validate-catalog select-benchmark prepare-ldscores setup-ldsc setup-ldsc-env prepare-sumstats prepare-all-sumstats external-gwas-manifest external-gwas external-gwas-smoke external-rg-prepare external-rg external-rg-dry-run external-rg-progress external-rg-collect one-vs-all one-vs-all-dry-run setup-ldsc-rs-rg-batch all-rg-prepare all-rg all-rg-dry-run all-rg-progress all-rg-collect all-rg-validation run-benchmark summarize benchmark90 hardware clean-small
 
 all: setup
 
@@ -105,6 +121,111 @@ prepare-all-sumstats: catalog prepare-ldscores
 		--stats-dir results/prepare_all/prepare_stats \
 		--log-dir logs/prepare_all_sumstats \
 		--jobs $(JOBS)
+
+external-gwas-manifest:
+	mkdir -p $(EXTERNAL_GWAS_DIR)
+	$(PYTHON) scripts/prepare_external_gwas.py \
+		--targets $(EXTERNAL_GWAS_TARGETS) \
+		--ld-snps data/ld/UKBB.EUR.snps \
+		--out-dir $(EXTERNAL_GWAS_DIR) \
+		--sources "$(EXTERNAL_GWAS_SOURCES)" \
+		--url-overrides "$(EXTERNAL_GWAS_URL_OVERRIDES)" \
+		$(if $(EXTERNAL_GWAS_INCLUDE),--include "$(EXTERNAL_GWAS_INCLUDE)",) \
+		$(if $(EXTERNAL_GWAS_LIMIT),--limit $(EXTERNAL_GWAS_LIMIT),) \
+		--manifest-only
+
+external-gwas:
+	mkdir -p $(EXTERNAL_GWAS_DIR)
+	$(PYTHON) scripts/prepare_external_gwas.py \
+		--targets $(EXTERNAL_GWAS_TARGETS) \
+		--ld-snps data/ld/UKBB.EUR.snps \
+		--out-dir $(EXTERNAL_GWAS_DIR) \
+		--sources "$(EXTERNAL_GWAS_SOURCES)" \
+		--url-overrides "$(EXTERNAL_GWAS_URL_OVERRIDES)" \
+		$(if $(EXTERNAL_GWAS_INCLUDE),--include "$(EXTERNAL_GWAS_INCLUDE)",) \
+		$(if $(EXTERNAL_GWAS_LIMIT),--limit $(EXTERNAL_GWAS_LIMIT),) \
+		$(if $(EXTERNAL_GWAS_MAX_ROWS),--max-rows $(EXTERNAL_GWAS_MAX_ROWS),) \
+		$(if $(EXTERNAL_GWAS_ZENODO_ARCHIVE),--zenodo-archive "$(EXTERNAL_GWAS_ZENODO_ARCHIVE)",) \
+		$(if $(EXTERNAL_GWAS_RSID_REFERENCE),--rsid-reference "$(EXTERNAL_GWAS_RSID_REFERENCE)",) \
+		$(if $(EXTERNAL_GWAS_STRICT),--strict,)
+
+external-gwas-smoke:
+	mkdir -p tmp/external_gwas_smoke
+	$(PYTHON) scripts/prepare_external_gwas.py \
+		--targets $(EXTERNAL_GWAS_TARGETS) \
+		--ld-snps data/ld/UKBB.EUR.snps \
+		--out-dir tmp/external_gwas_smoke \
+		--sources gwas_catalog \
+		--include GCST90011874 \
+		--max-rows 200000 \
+		--strict
+
+external-rg-prepare:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--pan-manifest $(PAN_GWAS_MANIFEST) \
+		--pan-sumstats-dir $(PAN_SUMSTATS_DIR) \
+		--external-manifest $(EXTERNAL_RG_MANIFEST) \
+		--combined-sumstats-dir $(EXTERNAL_RG_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_DIR) \
+		--trait-block-size $(EXTERNAL_RG_TRAIT_BLOCK_SIZE) \
+		--rayon-threads $(RAYON_THREADS) \
+		--max-parallel-shards $(MAX_PARALLEL_SHARDS) \
+		--force-shards \
+		--force-symlinks \
+		--prepare-only
+
+external-rg:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--pan-manifest $(PAN_GWAS_MANIFEST) \
+		--pan-sumstats-dir $(PAN_SUMSTATS_DIR) \
+		--external-manifest $(EXTERNAL_RG_MANIFEST) \
+		--combined-sumstats-dir $(EXTERNAL_RG_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_DIR) \
+		--trait-block-size $(EXTERNAL_RG_TRAIT_BLOCK_SIZE) \
+		--rayon-threads $(RAYON_THREADS) \
+		--max-parallel-shards $(MAX_PARALLEL_SHARDS) \
+		--force-shards \
+		--force-symlinks
+
+external-rg-dry-run:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--pan-manifest $(PAN_GWAS_MANIFEST) \
+		--pan-sumstats-dir $(PAN_SUMSTATS_DIR) \
+		--external-manifest $(EXTERNAL_RG_MANIFEST) \
+		--combined-sumstats-dir $(EXTERNAL_RG_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_DIR) \
+		--trait-block-size $(EXTERNAL_RG_TRAIT_BLOCK_SIZE) \
+		--rayon-threads $(RAYON_THREADS) \
+		--max-parallel-shards $(MAX_PARALLEL_SHARDS) \
+		--force-shards \
+		--force-symlinks \
+		--dry-run
+
+external-rg-progress:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--combined-sumstats-dir $(EXTERNAL_RG_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_DIR) \
+		--rayon-threads $(RAYON_THREADS) \
+		--max-parallel-shards $(MAX_PARALLEL_SHARDS) \
+		--progress
+
+external-rg-collect:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--combined-sumstats-dir $(EXTERNAL_RG_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_DIR) \
+		--rayon-threads $(RAYON_THREADS) \
+		--max-parallel-shards $(MAX_PARALLEL_SHARDS) \
+		--collect
 
 one-vs-all: setup-ldsc setup-ldsc-env catalog prepare-ldscores
 	@if [ -z "$(PHENOCODE)$(PHENOTYPE_ID)$(QUERY)" ]; then \

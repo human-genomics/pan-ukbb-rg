@@ -17,3 +17,8 @@ benchmarks/benchmark90/hardware.txt
 work/
 tmp/
 hail-*.log
+
+# Restricted-access URL overrides. The tracked external GWAS target manifest may
+# include metadata-only rows for datasets whose direct URLs should not be stored
+# in git; put local source_url values here when you have access.
+config/external_gwas_restricted_urls.tsv

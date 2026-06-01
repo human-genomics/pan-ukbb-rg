@@ -75,6 +75,180 @@ Run setup:
 make setup
 ```
 
+Optionally, after `make setup`, download and align external GWAS summary statistics
+to the same Pan-UKBB EUR SNP array:
+
+```bash
+make external-gwas
+```
+
+This writes LDSC-ready files under:
+
+```text
+data/external_gwas/aligned/*.sumstats.gz
+data/external_gwas/catalog/external_gwas_manifest.tsv
+data/external_gwas/prepare_stats/*.json
+```
+
+The external target list is `config/external_gwas_targets.tsv`. It currently covers
+the requested GWAS Catalog education traits, the Zenodo S-LDSC `sumstats_indep107`
+traits, static Figshare download URLs for the best/latest PGC row for each
+requested unique PGC phenotype, explicit CNCR/CTG Nextcloud rows, the PGC
+Alzheimer 2021 CNCR file
+`PGCALZ2sumstatsExcluding23andMe.txt.gz`, the CNCR Jansen/Nagel 2020 brain-volume
+files, Tielbeek et al. 2022 BroadABC summary statistics, static EGG Consortium
+releases, Levey Lab public EUR files, GIANT anthropometric releases, All of Us
+EUR height/BMI summary statistics, and a small number of direct public URLs for
+requested traits.
+
+PGC rows are limited to one best/latest row for each unique phenotype value in the
+PGC table, except where the table exposes distinct phenotypes within a working
+group such as panic disorder, quantitative anxiety symptoms, case-control anxiety,
+obsessive-compulsive symptoms, hoarding symptoms, and the specific substance-use
+phenotypes. The `cdg2025` PGC release is expanded into its six factor GWAS files.
+`alz2021` is included via the CNCR/CTG Nextcloud file approved by the PGC download
+page instead of as a duplicate unsupported PGC table row. Maciel et al. 2026
+`META.txt.gz` is excluded because it has SNP annotation columns but no association
+`Z`, `BETA`, `SE`, or `P` columns. The 2024 EGG trans-ancestry pubertal-growth
+rows are also excluded from the default target list. `PASS.Multiple_Sclerosis.IMSGC2019`
+is still recorded as missing because the Zenodo readme states that file requires
+separate approval; the public older MS GWAS Catalog row `GCST001198` is included
+as the automatic fallback.
+
+External GWAS not auto-added:
+
+- `Risktaking-Auto speeding` and `Risktaking-Nr. Sexual Partners`: the Karlsson
+  Linner et al. 2019 paper points to the SSGAC data portal, and the current
+  portal requires an account; OpenGWAS mirrors for the close UKB traits require
+  generated JWT/signed links for automated download.
+- IMSGC 2019 multiple sclerosis (`GCST009597` / `ieu-b-18`): GWAS Catalog marks
+  full summary statistics unavailable, and IMSGC requires a data-access request.
+- PGC suicide attempt (`sui2023`): the PGC download table points to a data-access
+  form rather than a public Figshare/Nextcloud file, so it is tracked as a
+  non-automated source.
+- Maciel et al. 2026 `META.txt.gz`: metadata only; not an RG input.
+- 2024 EGG trans-ancestry pubertal-growth rows: excluded by ancestry policy for
+  this external-GWAS run.
+
+External GWAS to keep/add:
+
+- `PGC.alz2021_PGCALZ2_no23andMe`
+- `broadabc2022_combined`, `broadabc2022_females`, `broadabc2022_males`
+- `GCST001198` public multiple sclerosis fallback
+- `PASS.General_Risk_Tolerance.KarlssonLinner2019`, already present from the
+  Zenodo S-LDSC archive, for the SSGAC risk-tolerance/risk-taking signal.
+
+The aligned files use the Pan-UKBB SNP identifier (`chr:pos:ref:alt`), Pan-UKBB
+ALT as `A1`, Pan-UKBB REF as `A2`, and flip `Z` when the external effect allele is
+the Pan-UKBB REF allele. Coordinate/allele matching is preferred. rsID+allele
+matching is used as a fallback when a source only has rsIDs or when it helps with
+legacy formats. Sources are restricted to European/EUR files where the source
+offers population-specific downloads; AFR, EAS, SAS, and other non-EUR files are
+excluded. Explicit EGG trans-ancestry birth-weight and childhood-obesity rows are
+retained, while the 2024 EGG trans-ancestry pubertal-growth rows are excluded.
+
+After `make external-gwas`, compute all genetic correlations involving at least
+one external GWAS:
+
+```bash
+make external-rg RAYON_THREADS=9 MAX_PARALLEL_SHARDS=1
+```
+
+This prepares a combined symlinked sumstats directory, writes pair shards only for
+external x Pan-UKBB and external x external pairs, and runs the same patched Rust
+`ldsc rg-batch` engine used by `make all-rg`. It deliberately does not recompute
+Pan-UKBB x Pan-UKBB pairs. External rg defaults to
+`EXTERNAL_RG_TRAIT_BLOCK_SIZE=64`, separately from the Pan-UKBB all-rg
+`TRAIT_BLOCK_SIZE=256`, so each external shard stays small enough to run
+alongside an existing Pan-UKBB rg job. Runtime state is written under:
+
+```text
+data/external_rg/sumstats/
+results/external_rg/metadata/
+results/external_rg/pair_shards/
+results/external_rg/rg_shards/
+```
+
+If the Pan-UKBB cache is outside this checkout, point the target at it:
+
+```bash
+make external-rg \
+  PAN_GWAS_MANIFEST=/path/to/data/catalog/eur_gwas_manifest.tsv \
+  PAN_SUMSTATS_DIR=/path/to/data/sumstats/eur \
+  LD_PREFIX=/path/to/data/ld/UKBB.EUR \
+  LDSC_RS_BIN=/path/to/external/ldsc-rs-rg-batch-target/release/ldsc \
+  RAYON_THREADS=9 \
+  MAX_PARALLEL_SHARDS=1 \
+  EXTERNAL_RG_TRAIT_BLOCK_SIZE=64
+```
+
+Progress and collection commands:
+
+```bash
+make external-rg-progress
+make external-rg-collect
+```
+
+Useful variants:
+
+```bash
+make external-gwas-manifest
+make external-gwas EXTERNAL_GWAS_SOURCES=gwas_catalog
+make external-gwas EXTERNAL_GWAS_SOURCES=cncr EXTERNAL_GWAS_LIMIT=20
+make external-gwas EXTERNAL_GWAS_SOURCES=egg EXTERNAL_GWAS_LIMIT=20
+make external-gwas EXTERNAL_GWAS_SOURCES=zenodo_face_cgwas EXTERNAL_GWAS_LIMIT=1 EXTERNAL_GWAS_MAX_ROWS=200000
+make external-gwas EXTERNAL_GWAS_INCLUDE=GCST90011874
+make external-gwas-smoke
+make external-rg-prepare
+make external-rg-dry-run
+```
+
+The default `make external-gwas` path uses explicit rows in
+`config/external_gwas_targets.tsv`. The `pgc`, `cncr`, and `egg` source modes are
+kept as discovery tools for refreshing the static target list, not as the default
+runtime path. The optional `zenodo_face_cgwas` source supports the 2024
+facial-shape Zenodo record by downloading `SnpInfo.tsv.bz2`, joining it to the
+946 `Beta/P` files inside the `.tar.bz2` archives, and aligning each facial
+distance GWAS to Pan-UKBB SNPs. It is not part of the default source list because
+the raw record is about 23.5 GB and the current converter processes those 946
+phenotypes serially.
+
+Restricted ENIGMA rows are tracked in `config/external_gwas_targets.tsv`, but
+their direct download URLs are intentionally not stored in git. Users can request
+ENIGMA GWAS access at <https://enigma.ini.usc.edu/>. After access is granted,
+copy `config/external_gwas_restricted_urls.tsv.example` to
+`config/external_gwas_restricted_urls.tsv` and fill `source_url` locally. That
+override file is gitignored and is read by `make external-gwas` through
+`EXTERNAL_GWAS_URL_OVERRIDES`. Without the local override file, those ENIGMA rows
+are reported as `restricted_url_missing` instead of downloaded.
+
+SSGAC rows that require an account use the same pattern. The tracked target rows
+describe the GWAS but omit direct URLs; users should request access through
+<https://www.thessgac.org/data>, then add local URLs or `file://` paths to
+`config/external_gwas_restricted_urls.tsv`. The local override file on this
+machine points `SSGAC.EA4_additive_excl_23andMe` at
+`/home/jesse/Downloads/EA4_additive_excl_23andMe.txt.gz`.
+
+If you already have the large Zenodo files locally, point the pipeline at them:
+
+```bash
+make external-gwas \
+  EXTERNAL_GWAS_SOURCES=zenodo_indep107 \
+  EXTERNAL_GWAS_ZENODO_ARCHIVE=/path/to/sumstats_indep107.tgz \
+  EXTERNAL_GWAS_RSID_REFERENCE=/path/to/reference.1000G.maf.0.005.txt.gz
+```
+
+By running the external download step, you are responsible for complying with
+the access terms of GWAS Catalog, Zenodo, PGC, Figshare, and any linked source.
+For PGC summary statistics specifically, running `make external-gwas` means you
+agree to the PGC Data Access Terms and Conditions published on the PGC download
+page: the data are not unrestricted, are provided as-is, must not be reposted,
+must not be used to identify participants, are for scientific research only
+unless separate commercial permission is obtained, must be used in compliance
+with applicable policies, must not be used for prenatal risk or predictive
+testing, require appropriate PGC citation, and require respect for PGC scientific
+priorities when data are released before publication.
+
 Then compute all genetic correlations involving one GWAS:
 
 ```bash
