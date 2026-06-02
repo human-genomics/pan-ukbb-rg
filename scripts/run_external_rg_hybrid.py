@@ -146,27 +146,8 @@ def write_combined_manifest(path: Path, traits: list[dict[str, str]]) -> None:
     tmp.replace(path)
 
 
-def pair_matches_filter(
-    p1: str,
-    p2: str,
-    include_ids: set[str],
-    include_prefixes: list[str],
-) -> bool:
-    if not include_ids and not include_prefixes:
-        return True
-    if p1 in include_ids or p2 in include_ids:
-        return True
-    return any(p1.startswith(prefix) or p2.startswith(prefix) for prefix in include_prefixes)
-
-
 def pair_rows_for_block(
-    traits: list[dict[str, str]],
-    n_pan: int,
-    block_i: int,
-    block_j: int,
-    block_size: int,
-    include_ids: set[str],
-    include_prefixes: list[str],
+    traits: list[dict[str, str]], n_pan: int, block_i: int, block_j: int, block_size: int
 ) -> list[tuple[int, int, int, str, str, str, str]]:
     n_traits = len(traits)
     i0 = block_i * block_size
@@ -181,17 +162,8 @@ def pair_rows_for_block(
                 continue
             p1 = traits[i]["trait_id"]
             p2 = traits[j]["trait_id"]
-            if not pair_matches_filter(p1, p2, include_ids, include_prefixes):
-                continue
             rows.append((rg.pair_id(n_traits, i, j), i, j, p1, p2, p1, p2))
     return rows
-
-
-def split_csv_values(values: list[str]) -> list[str]:
-    out: list[str] = []
-    for value in values:
-        out.extend(part.strip() for part in value.split(",") if part.strip())
-    return out
 
 
 def prepare_external_shards(args: argparse.Namespace) -> list[dict[str, str]]:
@@ -224,32 +196,18 @@ def prepare_external_shards(args: argparse.Namespace) -> list[dict[str, str]]:
     n_pan = len(pan_traits)
     n_external = len(external_traits)
     n_blocks = (n_traits + args.trait_block_size - 1) // args.trait_block_size
-    include_ids = set(split_csv_values(args.pair_include_trait_id))
-    include_prefixes = split_csv_values(args.pair_include_trait_prefix)
     manifest_rows: list[dict[str, str]] = []
     total_pairs = 0
-    external_pan_pairs = 0
-    external_external_pairs = 0
     shard_id = 0
     for block_i in range(n_blocks):
         for block_j in range(block_i, n_blocks):
-            rows = pair_rows_for_block(
-                traits,
-                n_pan,
-                block_i,
-                block_j,
-                args.trait_block_size,
-                include_ids,
-                include_prefixes,
-            )
+            rows = pair_rows_for_block(traits, n_pan, block_i, block_j, args.trait_block_size)
             if not rows:
                 continue
             shard = pair_dir / f"pairs.block_{block_i:03d}_{block_j:03d}.tsv"
             if args.force_shards or not shard.exists():
                 rg.write_shard(shard, rows)
             total_pairs += len(rows)
-            external_pan_pairs += sum(1 for _, i, j, *_ in rows if i < n_pan <= j)
-            external_external_pairs += sum(1 for _, i, j, *_ in rows if n_pan <= i and n_pan <= j)
             manifest_rows.append(
                 {
                     "shard_id": str(shard_id),
@@ -261,12 +219,9 @@ def prepare_external_shards(args: argparse.Namespace) -> list[dict[str, str]]:
             )
             shard_id += 1
 
-    if include_ids or include_prefixes:
-        expected = total_pairs
-    else:
-        expected = n_pan * n_external + n_external * (n_external - 1) // 2
-        if total_pairs != expected:
-            raise SystemExit(f"internal error: planned {total_pairs} pairs, expected {expected}")
+    expected = n_pan * n_external + n_external * (n_external - 1) // 2
+    if total_pairs != expected:
+        raise SystemExit(f"internal error: planned {total_pairs} pairs, expected {expected}")
 
     shard_manifest = meta_dir / "shards.tsv"
     tmp = shard_manifest.with_suffix(shard_manifest.suffix + ".tmp")
@@ -285,14 +240,12 @@ def prepare_external_shards(args: argparse.Namespace) -> list[dict[str, str]]:
         "pan_traits": n_pan,
         "external_traits": n_external,
         "total_traits": n_traits,
-        "external_pan_pairs": external_pan_pairs,
-        "external_external_pairs": external_external_pairs,
+        "external_pan_pairs": n_pan * n_external,
+        "external_external_pairs": n_external * (n_external - 1) // 2,
         "total_pairs": total_pairs,
         "shards": len(manifest_rows),
         "trait_block_size": args.trait_block_size,
         "combined_sumstats_dir": str(args.combined_sumstats_dir),
-        "pair_include_trait_ids": sorted(include_ids),
-        "pair_include_trait_prefixes": include_prefixes,
     }
     (meta_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(
@@ -335,24 +288,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-incomplete-collect", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-shards", type=int)
-    parser.add_argument(
-        "--pair-include-trait-id",
-        action="append",
-        default=[],
-        help=(
-            "Only emit pairs where at least one trait ID matches one of these comma-separated IDs. "
-            "Can be passed multiple times."
-        ),
-    )
-    parser.add_argument(
-        "--pair-include-trait-prefix",
-        action="append",
-        default=[],
-        help=(
-            "Only emit pairs where at least one trait ID starts with one of these comma-separated prefixes. "
-            "Can be passed multiple times."
-        ),
-    )
     parser.add_argument("--no-compress-output", dest="compress_output", action="store_false")
     parser.add_argument("--no-check-alleles", action="store_true")
     parser.set_defaults(compress_output=True)
