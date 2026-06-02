@@ -267,6 +267,12 @@ def parse_pan_snp(value: str) -> PanSnp | None:
     )
 
 
+def parse_chr_pos_ref_alt(value: str | None) -> PanSnp | None:
+    if is_missing(value):
+        return None
+    return parse_pan_snp(str(value).strip())
+
+
 def load_pan_panel(path: Path) -> PanPanel:
     by_snp: dict[str, PanSnp] = {}
     by_coord: dict[tuple[str, str, str, str], PanSnp] = {}
@@ -616,6 +622,7 @@ def resolve_requested_col(fieldnames: list[str], requested: str | None) -> str |
 def detect_columns(fieldnames: list[str], notes: str | None = None) -> dict[str, str | None]:
     cols = column_map(fieldnames)
     detected = {
+        "variant": pick_col(cols, ["variant"]),
         "chrom": pick_col(cols, ["chromosome", "chrom", "chr", "chr_hg19", "hm_chrom", "hm_chromosome"]),
         "pos": pick_col(
             cols,
@@ -689,6 +696,7 @@ def detect_columns(fieldnames: list[str], notes: str | None = None) -> dict[str,
     overrides = parse_notes_kv(notes)
     for key in [
         "chrom",
+        "variant",
         "pos",
         "effect",
         "other",
@@ -824,7 +832,8 @@ def convert_external_stream(
     cols = detect_columns(fieldnames, row.get("notes", ""))
     has_coord = all(cols[key] for key in ["chrom", "pos", "effect", "other"])
     has_rsid = rsid_map is not None and all(cols[key] for key in ["rsid", "effect", "other"])
-    if not has_coord and not has_rsid:
+    has_chr_pos_ref_alt = cols.get("variant") is not None
+    if not has_coord and not has_rsid and not has_chr_pos_ref_alt:
         raise ValueError(
             "Could not find coordinate or rsID columns with effect/other alleles; "
             f"header={fieldnames}"
@@ -859,8 +868,12 @@ def convert_external_stream(
                 if n is None:
                     n_no_n += 1
                     continue
+                variant = parse_chr_pos_ref_alt(row_value(data, cols.get("variant")))
                 effect = row_value(data, cols["effect"])
                 other = row_value(data, cols["other"])
+                if (is_missing(effect) or is_missing(other)) and variant is not None:
+                    effect = variant.alt
+                    other = variant.ref
                 if is_missing(effect) or is_missing(other):
                     n_missing += 1
                     continue
@@ -871,6 +884,15 @@ def convert_external_stream(
                     pos = row_value(data, cols["pos"])
                     if not is_missing(chrom) and not is_missing(pos):
                         oriented = orient_to_pan_alt(panel, chrom or "", pos or "", effect or "", other or "", z)
+                if oriented is None and variant is not None:
+                    oriented = orient_to_pan_alt(
+                        panel,
+                        variant.chrom,
+                        variant.pos,
+                        variant.alt,
+                        variant.ref,
+                        z,
+                    )
                 if oriented is None and has_rsid and rsid_map is not None:
                     rsid = row_value(data, cols["rsid"])
                     if not is_missing(rsid):
@@ -1770,6 +1792,16 @@ def selected_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[
     return selected
 
 
+def row_requires_rsid_map(row: dict[str, str]) -> bool:
+    source = row["source_type"]
+    if source in {"gwas_catalog", "zenodo_face_cgwas"}:
+        return False
+    notes = parse_notes_kv(row.get("notes", ""))
+    if source in {"direct_url", "egg"} and notes.get("variant_col"):
+        return False
+    return True
+
+
 def is_european_row(row: dict[str, str]) -> bool:
     population = row.get("population", "").lower()
     if "east asian" in population or "african" in population or "south asian" in population:
@@ -2339,7 +2371,7 @@ def main() -> None:
             f"{args.ld_snps} is missing. Run make setup or make prepare-ldscores first."
         )
     panel = load_pan_panel(args.ld_snps)
-    needs_rsid_map = any(row["source_type"] not in {"gwas_catalog", "zenodo_face_cgwas"} for row in selected)
+    needs_rsid_map = any(row_requires_rsid_map(row) for row in selected)
     rsid_map = ensure_rsid_map(args, panel) if needs_rsid_map else None
 
     failures: list[str] = []

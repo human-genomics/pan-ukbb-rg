@@ -30,6 +30,12 @@ PAN_SUMSTATS_DIR ?= data/sumstats/eur
 EXTERNAL_RG_MANIFEST ?= $(EXTERNAL_GWAS_DIR)/catalog/external_gwas_manifest.tsv
 EXTERNAL_RG_DIR ?= results/external_rg
 EXTERNAL_RG_SUMSTATS_DIR ?= data/external_rg/sumstats
+EXTERNAL_RG_INCREMENTAL_DIR ?= results/external_rg_neale_incremental
+EXTERNAL_RG_INCREMENTAL_SUMSTATS_DIR ?= data/external_rg_neale_incremental/sumstats
+EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX ?= NealeLab.
+EXTERNAL_RG_INCREMENTAL_TRAIT_IDS ?=
+EXTERNAL_RG_INCREMENTAL_RAYON_THREADS ?= 8
+EXTERNAL_RG_INCREMENTAL_MAX_PARALLEL_SHARDS ?= 1
 
 PAN_BASE := https://pan-ukb-us-east-1.s3.amazonaws.com
 MANIFEST := data/manifests/phenotype_manifest.tsv.bgz
@@ -45,7 +51,7 @@ LDSC_RS_BIN ?= $(LDSC_RS_TARGET)/release/ldsc
 ALL_RG_DIR ?= results/all_rg
 ALL_RG_VALIDATION_DIR ?= results/all_rg_validation
 
-.PHONY: all init setup fetch-manifests catalog validate-catalog select-benchmark prepare-ldscores setup-ldsc setup-ldsc-env prepare-sumstats prepare-all-sumstats external-gwas-manifest external-gwas external-gwas-smoke external-rg-prepare external-rg external-rg-dry-run external-rg-progress external-rg-collect one-vs-all one-vs-all-dry-run setup-ldsc-rs-rg-batch all-rg-prepare all-rg all-rg-dry-run all-rg-progress all-rg-collect all-rg-validation run-benchmark summarize benchmark90 hardware clean-small
+.PHONY: all init setup fetch-manifests catalog validate-catalog select-benchmark prepare-ldscores setup-ldsc setup-ldsc-env prepare-sumstats prepare-all-sumstats external-gwas-manifest external-gwas external-gwas-smoke external-rg-prepare external-rg external-rg-dry-run external-rg-progress external-rg-collect external-rg-incremental-prepare external-rg-incremental external-rg-incremental-dry-run external-rg-incremental-progress external-rg-incremental-collect one-vs-all one-vs-all-dry-run setup-ldsc-rs-rg-batch all-rg-prepare all-rg all-rg-dry-run all-rg-progress all-rg-collect all-rg-validation run-benchmark summarize benchmark90 hardware clean-small
 
 all: setup
 
@@ -225,6 +231,79 @@ external-rg-collect:
 		--out-dir $(EXTERNAL_RG_DIR) \
 		--rayon-threads $(RAYON_THREADS) \
 		--max-parallel-shards $(MAX_PARALLEL_SHARDS) \
+		--collect
+
+external-rg-incremental-prepare:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--pan-manifest $(PAN_GWAS_MANIFEST) \
+		--pan-sumstats-dir $(PAN_SUMSTATS_DIR) \
+		--external-manifest $(EXTERNAL_RG_MANIFEST) \
+		--combined-sumstats-dir $(EXTERNAL_RG_INCREMENTAL_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_INCREMENTAL_DIR) \
+		--trait-block-size $(EXTERNAL_RG_TRAIT_BLOCK_SIZE) \
+		--rayon-threads $(EXTERNAL_RG_INCREMENTAL_RAYON_THREADS) \
+		--max-parallel-shards $(EXTERNAL_RG_INCREMENTAL_MAX_PARALLEL_SHARDS) \
+		$(if $(EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX),--pair-include-trait-prefix "$(EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX)",) \
+		$(if $(EXTERNAL_RG_INCREMENTAL_TRAIT_IDS),--pair-include-trait-id "$(EXTERNAL_RG_INCREMENTAL_TRAIT_IDS)",) \
+		--force-shards \
+		--force-symlinks \
+		--prepare-only
+
+external-rg-incremental:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--pan-manifest $(PAN_GWAS_MANIFEST) \
+		--pan-sumstats-dir $(PAN_SUMSTATS_DIR) \
+		--external-manifest $(EXTERNAL_RG_MANIFEST) \
+		--combined-sumstats-dir $(EXTERNAL_RG_INCREMENTAL_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_INCREMENTAL_DIR) \
+		--trait-block-size $(EXTERNAL_RG_TRAIT_BLOCK_SIZE) \
+		--rayon-threads $(EXTERNAL_RG_INCREMENTAL_RAYON_THREADS) \
+		--max-parallel-shards $(EXTERNAL_RG_INCREMENTAL_MAX_PARALLEL_SHARDS) \
+		$(if $(EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX),--pair-include-trait-prefix "$(EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX)",) \
+		$(if $(EXTERNAL_RG_INCREMENTAL_TRAIT_IDS),--pair-include-trait-id "$(EXTERNAL_RG_INCREMENTAL_TRAIT_IDS)",) \
+		--force-shards \
+		--force-symlinks
+
+external-rg-incremental-dry-run:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--pan-manifest $(PAN_GWAS_MANIFEST) \
+		--pan-sumstats-dir $(PAN_SUMSTATS_DIR) \
+		--external-manifest $(EXTERNAL_RG_MANIFEST) \
+		--combined-sumstats-dir $(EXTERNAL_RG_INCREMENTAL_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_INCREMENTAL_DIR) \
+		--trait-block-size $(EXTERNAL_RG_TRAIT_BLOCK_SIZE) \
+		--rayon-threads $(EXTERNAL_RG_INCREMENTAL_RAYON_THREADS) \
+		--max-parallel-shards $(EXTERNAL_RG_INCREMENTAL_MAX_PARALLEL_SHARDS) \
+		$(if $(EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX),--pair-include-trait-prefix "$(EXTERNAL_RG_INCREMENTAL_TRAIT_PREFIX)",) \
+		$(if $(EXTERNAL_RG_INCREMENTAL_TRAIT_IDS),--pair-include-trait-id "$(EXTERNAL_RG_INCREMENTAL_TRAIT_IDS)",) \
+		--force-shards \
+		--force-symlinks \
+		--dry-run
+
+external-rg-incremental-progress:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--combined-sumstats-dir $(EXTERNAL_RG_INCREMENTAL_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_INCREMENTAL_DIR) \
+		--rayon-threads $(EXTERNAL_RG_INCREMENTAL_RAYON_THREADS) \
+		--max-parallel-shards $(EXTERNAL_RG_INCREMENTAL_MAX_PARALLEL_SHARDS) \
+		--progress
+
+external-rg-incremental-collect:
+	$(PYTHON) scripts/run_external_rg_hybrid.py \
+		--combined-sumstats-dir $(EXTERNAL_RG_INCREMENTAL_SUMSTATS_DIR) \
+		--ld-prefix $(LD_PREFIX) \
+		--ldsc-bin $(LDSC_RS_BIN) \
+		--out-dir $(EXTERNAL_RG_INCREMENTAL_DIR) \
+		--rayon-threads $(EXTERNAL_RG_INCREMENTAL_RAYON_THREADS) \
+		--max-parallel-shards $(EXTERNAL_RG_INCREMENTAL_MAX_PARALLEL_SHARDS) \
 		--collect
 
 one-vs-all: setup-ldsc setup-ldsc-env catalog prepare-ldscores
