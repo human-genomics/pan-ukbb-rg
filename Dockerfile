@@ -14,7 +14,7 @@
 
 FROM debian:bookworm-slim
 
-LABEL org.opencontainers.image.source="https://github.com/jesseICR/pan-ukbb-rg"
+LABEL org.opencontainers.image.source="https://github.com/human-genomics/pan-ukbb-rg"
 LABEL org.opencontainers.image.description="Pan-UKBB EUR LDSC one-vs-all genetic correlation pipeline"
 LABEL org.opencontainers.image.licenses="MIT"
 

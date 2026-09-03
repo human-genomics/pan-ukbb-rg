@@ -29,7 +29,7 @@ Pan-UKBB EUR LDSC one-vs-all container
 Mount a host directory at /app/pipeline-output to persist generated data:
 
   docker run --rm -v $(pwd)/pan-ukbb-rg-work:/app/pipeline-output \
-    ghcr.io/jesseicr/pan-ukbb-rg:latest setup --jobs 8
+    ghcr.io/human-genomics/pan-ukbb-rg:latest setup --jobs 8
 
 Commands:
   setup [--jobs N]

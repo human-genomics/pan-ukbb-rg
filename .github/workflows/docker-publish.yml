@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: jesseicr/pan-ukbb-rg
+  IMAGE_NAME: human-genomics/pan-ukbb-rg
 
 jobs:
   build-and-push:

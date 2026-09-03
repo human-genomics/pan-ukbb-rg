@@ -5,7 +5,7 @@ European-ancestry GWAS — one trait against all others, or the full all-pairs m
 and align external published GWAS to the same SNP set. The results power the
 **[Genetic Correlation Catalog](https://rgcatalog.org)**.
 
-**[🔎 Explore the results](https://rgcatalog.org)**  ·  **[⬇ Download the full export (v2.0)](https://github.com/jesseICR/pan-ukbb-rg/releases/tag/v2.0)**  ·  MIT-licensed
+**[🔎 Explore the results](https://rgcatalog.org)**  ·  **[⬇ Download the full export (v2.0)](https://github.com/human-genomics/pan-ukbb-rg/releases/tag/v2.0)**  ·  MIT-licensed
 
 ---
 
@@ -24,7 +24,7 @@ The published catalog combines these into **~28 million genetic correlations acr
 ## Just want the data?
 
 - **Browse interactively:** <https://rgcatalog.org>
-- **Download the full r<sub>g</sub> export:** [release v2.0](https://github.com/jesseICR/pan-ukbb-rg/releases/tag/v2.0)
+- **Download the full r<sub>g</sub> export:** [release v2.0](https://github.com/human-genomics/pan-ukbb-rg/releases/tag/v2.0)
 
 You only need this repository if you want to recompute or extend the correlations.
 
@@ -36,17 +36,17 @@ You only need this repository if you want to recompute or extend the correlation
 # 1. One-time setup into a persistent host directory (downloads + prepares the cache).
 mkdir -p pan-ukbb-rg-work
 docker run --rm -v "$(pwd)/pan-ukbb-rg-work:/app/pipeline-output" \
-  ghcr.io/jesseicr/pan-ukbb-rg:latest setup --jobs 8
+  ghcr.io/human-genomics/pan-ukbb-rg:latest setup --jobs 8
 
 # 2. All correlations for one trait (phenocode 20016 = fluid intelligence score).
 docker run --rm -v "$(pwd)/pan-ukbb-rg-work:/app/pipeline-output" \
-  ghcr.io/jesseicr/pan-ukbb-rg:latest one-vs-all --phenocode 20016 --jobs 8
+  ghcr.io/human-genomics/pan-ukbb-rg:latest one-vs-all --phenocode 20016 --jobs 8
 ```
 
 ### Local
 
 ```bash
-git clone https://github.com/jesseICR/pan-ukbb-rg.git
+git clone https://github.com/human-genomics/pan-ukbb-rg.git
 cd pan-ukbb-rg
 make setup                                    # one-time data prep (long — see Runtime)
 python3 scripts/run_one_vs_all.py --phenocode 20016
